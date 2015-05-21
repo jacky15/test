@@ -195,7 +195,7 @@ class BaseHttpHandler(MyTcpHandler):
     #可以被映射的方法
     ALLOW_METHOD = ['GET','POST']
     #解析用户请求
-    PATH_RE = re.compile('(?P<path>(/.*?))\?(?P<params>(.*))')
+    PATH_RE = re.compile('(?P<path>(/.*?))(\?(?P<params>(.*)))?')
     #PARAM_RE = re.compile('((.*?)=(.*?))&?*')
     command = ''
     request_path = ''
@@ -215,7 +215,7 @@ class BaseHttpHandler(MyTcpHandler):
         if not self.analysis_request(raw_request_line):
             return self.request_error('request error')
 
-        self.analysis_head()
+        
         #判断这个请求是何种请求
         method = getattr(self,self.command.lower())
         method()
@@ -241,16 +241,25 @@ class BaseHttpHandler(MyTcpHandler):
         self.request_path = _result.groupdict()['path']
         _request_param = _result.groupdict()['params']
 
-        _request_param_list = _request_param.split('&')
+        #解析头部
+        self.analysis_head()
 
-        for param in _request_param_list:
-            name,value = param.split('=')
-            self.request_param['GET'][name] = value
+        if _request_param:
+            analysis_param('GET',_request_param)
+
+        self.analysis_body()
 
         return True
 
+    def analysis_param(self,method,request_str):
+        
+        _request_param_list = request_str.split('&')
+        for param in _request_param_list:
+            name,value = param.split('=')
+            self.request_param[method][name] = value
+
     def analysis_head(self):
-        #读取浏览器的所有信息
+        #读取浏览器的所有头信息
         re_space = re.compile('^\s+$')
         while True:
             info = self.rfile.readline()
@@ -260,7 +269,16 @@ class BaseHttpHandler(MyTcpHandler):
                 return
             #TODO:头部处理
             info = info.split(':')
-            self.head_info[info[0]] = info[1]
+            self.head_info[info[0].lower()] = info[1]
+
+    def analysis_body(self):
+        #读取浏览器的所有body信息
+        _content_length = self.head_info.get('content-length',None)
+        
+        if _content_length:
+            _request_param = self.rfile.read(int(_content_length))
+            print _request_param,int(_content_length)
+            self.analysis_param('POST',_request_param)
 
     def request_error(self,message):
         '''返回错误信息'''
@@ -271,14 +289,18 @@ class HttpHandler(BaseHttpHandler):
     def get(self):
         print 'In GET function.'
         print 'request path : %s' % (self.request_path)
-
+        print self.head_info
         self.wfile.write('hello world\n')
         result = json.dumps(self.request_param['GET'])
         self.wfile.write(result + '\n')
 
 
     def post(self):
-        pass
+        print 'In POST function.'
+        print 'request path : %s' % (self.request_path)
+        self.wfile.write('hello world\n')
+        result = json.dumps(self.request_param['POST'])
+        self.wfile.write(result + '\n')
 
 
 def main():
