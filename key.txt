@@ -1,0 +1,34 @@
+高并发	 
+C10K问题:http://www.kegel.com/c10k.html方案1一个线程, NonBlock IO以及水平触发方式实现Select, poll
+方案2
+一个线程, NonBlock IO以及边缘触发方式实现EpollPython中, select/poll/epoll都封装在模块select中
+
+水平触发: 只要满足条件, 就触发事件
+边缘触发: 当状态变化时, 触发一个事件
+
+方案3一个线程, 采用异步IO[asyncore, asynchat], proactor模式
+Linux没有原生支持
+IO操作由内核完成
+可以处理文件
+方案4 &方案5
+一个客户端一个IO线程应用层代码写入内核
+
+缺点: 只有一个线程, 长时间逻辑处理导致其他客户端挂起
+解决办法: 一个线程/进程处理接受, 多个子线程/进程处理逻辑
+Tornado, Nginx, Apache, uwsgi
+多线程问题GIL: 全局解释锁, 导致一个时间只能运行一个线程
+实现并发
+NonBlock
+Multiprocessing通讯: pipe,消息队列, 共享内存
+案例https://docs.python.org/2/library/multiprocessing.html?highlight=multiprocessing#examples
+
+协程
+Greenlet
+Stackless
+Gevent
+Eventlet
+额外阅读
+Linux Kernel Tuning for C500k迭代三在迭代1,2的基础上, 采用epoll进行重构.
+基础要求支持404, 500错误采用NonBlocking IO实现(推荐epoll)进阶要求
+HttpRequestHandler封装
+Http协议解析: BaseHttpServer.BaseHttpRequestHandler
