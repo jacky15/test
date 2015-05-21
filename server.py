@@ -8,18 +8,6 @@ import datetime
 import json
 import re
 
-#class MyBaseRequsetHandler(object):
-    #TODO:add the http handle in this class
-#    '''the class is use to handle the request'''
-#
-#    def __init__(self):
-#        '''the init function'''
-#        pass
-
-#    def handle(self):
-#        '''use to handle the request'''
-#        pass
-
 def _EINTER_retry(fun,*args):
     '''if the function is stop for EINTR,try continue'''
     while True:
