@@ -233,7 +233,7 @@ class BaseHttpHandler(MyTcpHandler):
         self.analysis_head()
 
         if _request_param:
-            analysis_param('GET',_request_param)
+            self.analysis_param('GET',_request_param)
 
         self.analysis_body()
 
