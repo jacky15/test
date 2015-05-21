@@ -1,9 +1,12 @@
 #!/usr/bin/env python
+#coding=utf8
 import select
 import threading
 import socket
 import argparse
 import datetime
+import json
+import re
 
 #class MyBaseRequsetHandler(object):
     #TODO:add the http handle in this class
@@ -107,6 +110,9 @@ class TcpServer(object):
 class TcpHandler(object):
     '''define the class to handler the request'''
 
+    rbufsize = -1
+    wbufsize = 0
+
     def __init__(self,request_socket,client_address,client_port,server):
         '''init the handle'''
         #define the request,which usual is the connect socket
@@ -116,20 +122,29 @@ class TcpHandler(object):
         self.server = server
         
         try:
+            self.setup()
             self.handle()
         finally:
             self.finish()
 
+    def setup(self):
+        self.rfile = self.request_socket.makefile('rb', self.rbufsize)
+        self.wfile = self.request_socket.makefile('wb', self.wbufsize)
+
     def handle(self):
-        '''the handler to proccess the request'''                
-        #TODO:add the header ananlysis here
-        print '%s : visit from %s' % (datetime.datetime.now(),self.client_address)
-        print 'process in thread : %s ' %(threading.current_thread().ident)
-        self.request_socket.sendall('hello world\n')
+        '''
+        the handler to proccess the request,
+        subclass should do some work in this function
+        '''                
+        pass
 
     def finish(self):
         #TODO:add the action in finish       
         #close the request
+        if not self.wfile.closed:
+            self.wfile.flush
+        self.rfile.close()
+        self.wfile.close()
         self.request_socket.close()
 
 class ThreadingMixIn(object):
@@ -168,17 +183,116 @@ def trans_arg():
 
     return result.add,result.port
 
+class MyTcpHandler(TcpHandler):
+
+    def handle(self):
+        #TODO:add the header ananlysis here
+        print '%s : visit from %s' % (datetime.datetime.now(),self.client_address)
+        print 'process in thread : %s ' %(threading.current_thread().ident)
+        
+class BaseHttpHandler(MyTcpHandler):
+    '''此类内部为单线程处理，线程安全'''
+    #可以被映射的方法
+    ALLOW_METHOD = ['GET','POST']
+    #解析用户请求
+    PATH_RE = re.compile('(?P<path>(/.*?))\?(?P<params>(.*))')
+    #PARAM_RE = re.compile('((.*?)=(.*?))&?*')
+    command = ''
+    request_path = ''
+    request_param = {
+        'GET' : {},
+        'POST' : {}
+    }
+    head_info = {}
+
+    def handle(self):
+        '''此函数用于解析http请求首行，用于分发各个方法进行处理，不关心详细处理细节'''
+        #父类的处理，可以去除
+        super(BaseHttpHandler,self).handle()
+
+        raw_request_line = self.rfile.readline(65535)
+
+        if not self.analysis_request(raw_request_line):
+            return self.request_error('request error')
+
+        self.analysis_head()
+        #判断这个请求是何种请求
+        method = getattr(self,self.command.lower())
+        method()
+        self.wfile.flush()
+
+    def analysis_request(self,raw_request_line):
+        '''解析用户的请求'''
+        raw_request_list = raw_request_line.split()
+        command,request_path = raw_request_list[0],raw_request_list[1]
+
+        if not command.upper() in self.ALLOW_METHOD:
+            return False
+        
+        self.command = command
+        self.request_path = request_path
+
+        #过滤请求路径异常的请求
+        _result = self.PATH_RE.match(self.request_path)
+
+        if not _result:
+            return False
+
+        self.request_path = _result.groupdict()['path']
+        _request_param = _result.groupdict()['params']
+
+        _request_param_list = _request_param.split('&')
+
+        for param in _request_param_list:
+            name,value = param.split('=')
+            self.request_param['GET'][name] = value
+
+        return True
+
+    def analysis_head(self):
+        #读取浏览器的所有信息
+        re_space = re.compile('^\s+$')
+        while True:
+            info = self.rfile.readline()
+            #判断是否已经完全接收了头部，读到了空白行
+            _result = re_space.match(info)
+            if _result :
+                return
+            #TODO:头部处理
+            info = info.split(':')
+            self.head_info[info[0]] = info[1]
+
+    def request_error(self,message):
+        '''返回错误信息'''
+        return self.wfile.write(json.dumps({'result' : False}))
+
+class HttpHandler(BaseHttpHandler):
+    
+    def get(self):
+        print 'In GET function.'
+        print 'request path : %s' % (self.request_path)
+
+        self.wfile.write('hello world\n')
+        result = json.dumps(self.request_param['GET'])
+        self.wfile.write(result + '\n')
+
+
+    def post(self):
+        pass
+
+
 def main():
     #get the address and port 
     address,port = trans_arg()
     #init the server
-    server = ThreadTcpServer(address,port,TcpHandler)
+    server = ThreadTcpServer(address,port,HttpHandler)
     #run it
     try: 
         server.serve_forever()
     except KeyboardInterrupt:
         server.shutdown()
         print '\nbye~'
+
 if __name__ == '__main__':
     main()
 
