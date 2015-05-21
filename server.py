@@ -299,6 +299,7 @@ class HttpHandler(BaseHttpHandler):
         print 'In POST function.'
         print 'request path : %s' % (self.request_path)
         self.wfile.write('hello world\n')
+        self.request_param['POST']['time'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         result = json.dumps(self.request_param['POST'])
         self.wfile.write(result + '\n')
 
