@@ -13,8 +13,8 @@ def _EINTER_retry(fun,*args):
     while True:
         try:
             return fun(*args)
-        except (OSError, select.error) as e:
-            if e.args[0] != errno.EINTR:
+        except (OSError, select.errno) as e:
+            if e.args[0] != select.errno.EINTR:
                 raise
 
 class TcpServer(object):
@@ -284,7 +284,7 @@ class BaseHttpHandler(MyTcpHandler):
         self.analysis_head()
 
         if _request_param:
-            self.analysis_param('GET',_request_param)
+            self.analysis_param('GET', _request_param)
 
         self.analysis_body()
 
