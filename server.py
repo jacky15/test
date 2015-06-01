@@ -7,14 +7,16 @@ import argparse
 import datetime
 import json
 import re
+import os
+import multiprocessing
 
 def _EINTER_retry(fun,*args):
     '''if the function is stop for EINTR,try continue'''
     while True:
         try:
             return fun(*args)
-        except (OSError, select.errno) as e:
-            if e.args[0] != select.errno.EINTR:
+        except (OSError, os.errno) as e:
+            if e.args[0] != os.errno.EINTR:
                 raise
 
 class TcpServer(object):
@@ -155,8 +157,22 @@ class ThreadingMixIn(object):
 
         new_thread.start()
 
+class ProcessMixIn(object):
+    '''多进程混合类'''
+
+    pool = multiprocessing.Pool()
+    def process_request_in_process(self,request_socket,request_info):
+        '''where the process is real process'''
+        self.handler_class(request_socket,request_info[0],request_info[1],self)
+
+    def process_request(self,request_socket,request_info):
+        _ = self.pool.apply_async(func=self.process_request,args=(request_socket,request_info))
+
 
 class ThreadTcpServer(ThreadingMixIn,TcpServer):
+    pass
+
+class ProcessTcpServer(ProcessMixIn,TcpServer):
     pass
 
 def trans_arg():
@@ -174,9 +190,9 @@ def trans_arg():
 class MyTcpHandler(TcpHandler):
 
     def handle(self):
-        #TODO:add the header ananlysis here
-        print '%s : visit from %s' % (datetime.datetime.now(),self.client_address)
-        print 'process in thread : %s ' %(threading.current_thread().ident)
+        '''TODO:add the header ananlysis here'''
+        #print '%s : visit from %s' % (datetime.datetime.now(),self.client_address)
+        #print 'process in thread : %s ' %(threading.current_thread().ident)
         
 class BaseHttpHandler(MyTcpHandler):
     '''此类内部为单线程处理，线程安全'''
@@ -246,7 +262,7 @@ class BaseHttpHandler(MyTcpHandler):
 
         raw_request_line = self.rfile.readline(65535)
 
-        print raw_request_line
+        #print raw_request_line
         if not self.analysis_request(raw_request_line):
             return self.request_error('request error')
 
@@ -316,7 +332,7 @@ class BaseHttpHandler(MyTcpHandler):
         
         if _content_length:
             _request_param = self.rfile.read(int(_content_length))
-            print _request_param,int(_content_length)
+            #print _request_param,int(_content_length)
             self.analysis_param('POST',_request_param)
 
     def request_error(self,error_code,message):
@@ -389,8 +405,9 @@ def main():
     #get the address and port 
     address,port = trans_arg()
     #init the server
-    server = ThreadTcpServer(address,port,MyHttpHandler)
-
+    #server = ThreadTcpServer(address,port,MyHttpHandler)
+    server = TcpServer(address, port, MyHttpHandler )
+    #server = ProcessTcpServer(address,port,MyHttpHandler)
     #server = ThreadTcpServer(address,port,MyTcpHandler)
     #run it
     try: 
