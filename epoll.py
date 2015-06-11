@@ -30,35 +30,48 @@ def start_server():
         poll_method = select_wapper
         remove_socket = remove_select_socket
         # 此处使用set,考虑到去除socket的时候，list的消耗过大
-        socket_set = {server_socket}
+        socket_set = set([server_socket])
     else:
         poll_method = epoll_wapper
-
+        socket_set = select.epoll()
+        socket_set.register(server_socket, select.EPOLLIN | select.EPOLLET)
+        remove_socket = remove_epoll_socket
     while 1:
-        ready_socket_list = poll_method(socket_set)[0]
+        ready_socket_list = poll_method(socket_set)
         if len(ready_socket_list) == 0:
             continue
 
-        ready_socket = ready_socket_list[0]
+        # ready_socket = ready_socket_list[0]
+        for ready_socket in ready_socket_list:
 
-        if ready_socket == server_socket:
-            # 有新的用户请求,加入到set中
-            select_accpect_handler(server_socket, socket_set)
-            continue
-        elif ready_socket in socket_set:
-            handle_request(ready_socket)
-            remove_socket(ready_socket, socket_set)
+            if ready_socket == server_socket:
+                # 有新的用户请求,加入到set中
+                select_accpect_handler(server_socket, socket_set)
+                continue
+            else:
+                handle_request(ready_socket)
+                remove_socket(ready_socket, socket_set)
 
 
 def remove_select_socket(socket_remove, socket_set):
     """移除该socket"""
     socket_set.remove(socket_remove)
 
+
+def remove_epoll_socket(socket_remove, socket_set):
+    """取消某个socket的注册"""
+    socket_set.unregister(socket_remove)
+
+
 def select_accpect_handler(server_socket, socket_set):
     """接受新的socket的方法"""
     _temp_socket = server_socket.accept()[0]
     socket_set.add(_temp_socket)
 
+
+def epoll_accpect_handler(server_socket, socket_set):
+    """接受新的socket的方法"""
+    socket_set.register(server_socket.accept(), select.EPOLLIN | select.EPOLLET)
 
 def ananlysis_param(raw_string):
     """解析传入的字符串,返回一个字典"""
@@ -161,12 +174,14 @@ def handler_jacky_post_request(request_head, request_get_param, request_post_par
 
 def select_wapper(socket_set):
     """select方法的包装，返回结果是一个文件描述符"""
-    return select.select(socket_set, [], [], 0.1)
+    return select.select(socket_set, [], [], 0.1)[0]
 
 
-def epoll_wapper():
+def epoll_wapper(socket_set):
     """epoll方法的包装，返回结果是一个文件描述符"""
-    pass
+    _temp = socket_set.poll(0.5)
+
+    return [fd for fd, event in _temp]
 
 
 if __name__ == '__main__':
